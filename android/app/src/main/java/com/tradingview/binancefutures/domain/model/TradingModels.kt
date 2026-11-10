@@ -25,8 +25,10 @@ enum class Timeframe(val interval: String, val displayName: String, val duration
     M1("1m", "1m", 60 * 1000L),
     M3("3m", "3m", 3 * 60 * 1000L),
     M5("5m", "5m", 5 * 60 * 1000L),
+    M9("9m", "9m", 9 * 60 * 1000L),
     M15("15m", "15m", 15 * 60 * 1000L),
     M30("30m", "30m", 30 * 60 * 1000L),
+    M45("45m", "45m", 45 * 60 * 1000L),
     H1("1h", "1h", 60 * 60 * 1000L),
     H2("2h", "2h", 2 * 60 * 60 * 1000L),
     H4("4h", "4h", 4 * 60 * 60 * 1000L),
@@ -44,6 +46,10 @@ enum class Timeframe(val interval: String, val displayName: String, val duration
             return values().firstOrNull { it.interval.equals(clean, ignoreCase = true) } ?: M1
         }
     }
+}
+
+enum class ConnectionStatus {
+    CONNECTING, CONNECTED, RECONNECTING, ERROR
 }
 
 enum class PriceType {

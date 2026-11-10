@@ -14,6 +14,7 @@ interface TradingRepository {
         priceType: com.tradingview.binancefutures.domain.model.PriceType = com.tradingview.binancefutures.domain.model.PriceType.LAST
     ): List<Candle>
     fun getLiveCandleStream(symbol: String, timeframe: Timeframe): Flow<Candle>
+    suspend fun getServerTime(): Long
 }
 
 class TradingRepositoryImpl(
@@ -33,5 +34,9 @@ class TradingRepositoryImpl(
 
     override fun getLiveCandleStream(symbol: String, timeframe: Timeframe): Flow<Candle> {
         return remoteDataSource.observeLiveKline(symbol, timeframe)
+    }
+
+    override suspend fun getServerTime(): Long {
+        return remoteDataSource.getServerTime()
     }
 }

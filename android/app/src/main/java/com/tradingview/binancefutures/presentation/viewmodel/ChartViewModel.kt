@@ -36,6 +36,8 @@ data class ChartUiState(
     val selectedDrawingId: String? = null,
     val alerts: List<PriceAlert> = emptyList(),
     val replayState: BarReplayState = BarReplayState(),
+    val connectionStatus: ConnectionStatus = ConnectionStatus.CONNECTING,
+    val serverTimeOffset: Long = 0L,
     val isLoading: Boolean = false,
     val errorMessage: String? = null
 )
@@ -51,14 +53,33 @@ class ChartViewModel @JvmOverloads constructor(
     private val _uiState = MutableStateFlow(ChartUiState())
     val uiState: StateFlow<ChartUiState> = _uiState.asStateFlow()
 
+    private var loadJob: Job? = null
     private var wsJob: Job? = null
     private var pollJob: Job? = null
+    private var serverTimeJob: Job? = null
     private var previousPrice: Float? = null
 
     init {
         loadSavedFavoritesAndAlerts()
         loadTradingPairs()
+        syncServerTime()
         loadCandles("BTCUSDT", Timeframe.M1)
+    }
+
+    private fun syncServerTime() {
+        serverTimeJob?.cancel()
+        serverTimeJob = viewModelScope.launch {
+            while (isActive) {
+                try {
+                    val serverTime = repository.getServerTime()
+                    val offset = serverTime - System.currentTimeMillis()
+                    _uiState.value = _uiState.value.copy(serverTimeOffset = offset)
+                } catch (e: Exception) {
+                    // keep current offset
+                }
+                delay(60_000L) // Resync every minute
+            }
+        }
     }
 
     private fun loadSavedFavoritesAndAlerts() {
@@ -161,22 +182,34 @@ class ChartViewModel @JvmOverloads constructor(
     }
 
     private fun loadCandles(symbol: String, tf: Timeframe, pType: PriceType = _uiState.value.priceType) {
+        loadJob?.cancel()
         wsJob?.cancel()
         pollJob?.cancel()
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true)
+        loadJob = viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                isLoading = true,
+                connectionStatus = ConnectionStatus.CONNECTING,
+                errorMessage = null
+            )
             try {
                 val history = repository.getHistoricalCandles(symbol, tf, pType)
-                _uiState.value = _uiState.value.copy(candles = history, isLoading = false)
+                _uiState.value = _uiState.value.copy(
+                    candles = history,
+                    isLoading = false,
+                    connectionStatus = ConnectionStatus.CONNECTED
+                )
                 if (history.isNotEmpty()) {
                     previousPrice = history.last().close
                 }
 
-                // 1. WebSocket Live Stream
+                // 1. WebSocket Live Stream with auto-reconnection
                 wsJob = launch {
                     repository.getLiveCandleStream(symbol, tf)
-                        .catch { /* allow poller to maintain live movement */ }
+                        .catch { 
+                            _uiState.value = _uiState.value.copy(connectionStatus = ConnectionStatus.RECONNECTING)
+                        }
                         .collect { updatedCandle ->
+                            _uiState.value = _uiState.value.copy(connectionStatus = ConnectionStatus.CONNECTED)
                             handleCandleUpdate(updatedCandle)
                         }
                 }
@@ -196,7 +229,11 @@ class ChartViewModel @JvmOverloads constructor(
                     }
                 }
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(isLoading = false, errorMessage = e.message)
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    connectionStatus = ConnectionStatus.ERROR,
+                    errorMessage = e.message
+                )
             }
         }
     }

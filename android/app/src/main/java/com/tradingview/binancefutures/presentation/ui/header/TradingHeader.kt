@@ -48,20 +48,22 @@ fun TradingHeader(
         scrollState.animateScrollTo(
             when (timeframe) {
                 Timeframe.M1 -> 0
-                Timeframe.M3 -> 50
-                Timeframe.M5 -> 100
-                Timeframe.M15 -> 150
+                Timeframe.M3 -> 40
+                Timeframe.M5 -> 80
+                Timeframe.M9 -> 120
+                Timeframe.M15 -> 160
                 Timeframe.M30 -> 200
-                Timeframe.H1 -> 250
-                Timeframe.H2 -> 300
-                Timeframe.H4 -> 350
+                Timeframe.M45 -> 240
+                Timeframe.H1 -> 280
+                Timeframe.H2 -> 320
+                Timeframe.H4 -> 360
                 Timeframe.H6 -> 400
-                Timeframe.H8 -> 450
-                Timeframe.H12 -> 500
-                Timeframe.D1 -> 550
-                Timeframe.D3 -> 600
-                Timeframe.W1 -> 650
-                Timeframe.MO1 -> 700
+                Timeframe.H8 -> 440
+                Timeframe.H12 -> 480
+                Timeframe.D1 -> 520
+                Timeframe.D3 -> 560
+                Timeframe.W1 -> 600
+                Timeframe.MO1 -> 640
                 else -> 0
             }
         )

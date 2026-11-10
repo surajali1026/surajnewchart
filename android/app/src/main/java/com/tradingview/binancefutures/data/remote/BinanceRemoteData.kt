@@ -14,15 +14,38 @@ import okhttp3.*
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
-class BinanceRemoteDataSource(
     private val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
+        .pingInterval(15, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
         .build(),
     private val gson: Gson = Gson()
 ) {
     private val baseUrl = "https://fapi.binance.com"
     private val wsBaseUrl = "wss://fstream.binance.com/ws"
+
+    fun getBinanceSupportedInterval(timeframe: Timeframe): String {
+        return when (timeframe) {
+            Timeframe.M9 -> "5m"
+            Timeframe.M45 -> "15m"
+            else -> timeframe.interval
+        }
+    }
+
+    suspend fun getServerTime(): Long = withContext(Dispatchers.IO) {
+        try {
+            val request = Request.Builder().url("$baseUrl/fapi/v1/time").build()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@withContext System.currentTimeMillis()
+                val body = response.body?.string() ?: return@withContext System.currentTimeMillis()
+                val obj = gson.fromJson(body, com.google.gson.JsonObject::class.java)
+                obj.get("serverTime")?.asLong ?: System.currentTimeMillis()
+            }
+        } catch (e: Exception) {
+            System.currentTimeMillis()
+        }
+    }
 
     suspend fun getFuturesTickers(): List<TradingPair> = withContext(Dispatchers.IO) {
         val request = Request.Builder()
@@ -69,14 +92,15 @@ class BinanceRemoteDataSource(
             com.tradingview.binancefutures.domain.model.PriceType.MARK -> "markPriceKlines?symbol=${symbol.uppercase()}"
             com.tradingview.binancefutures.domain.model.PriceType.INDEX -> "indexPriceKlines?pair=${symbol.uppercase()}"
         }
-        val url = "$baseUrl/fapi/v1/$endpoint&interval=${timeframe.interval}&limit=$limit"
+        val interval = getBinanceSupportedInterval(timeframe)
+        val url = "$baseUrl/fapi/v1/$endpoint&interval=$interval&limit=$limit"
         val request = Request.Builder().url(url).build()
 
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
                 // If indexPriceKlines fails with pair, try symbol
                 if (priceType == com.tradingview.binancefutures.domain.model.PriceType.INDEX) {
-                    val fallbackUrl = "$baseUrl/fapi/v1/indexPriceKlines?symbol=${symbol.uppercase()}&interval=${timeframe.interval}&limit=$limit"
+                    val fallbackUrl = "$baseUrl/fapi/v1/indexPriceKlines?symbol=${symbol.uppercase()}&interval=$interval&limit=$limit"
                     client.newCall(Request.Builder().url(fallbackUrl).build()).execute().use { fbResp ->
                         if (fbResp.isSuccessful) {
                             val fbBody = fbResp.body?.string() ?: return@withContext emptyList()
@@ -111,7 +135,8 @@ class BinanceRemoteDataSource(
     }
 
     fun observeLiveKline(symbol: String, timeframe: Timeframe): Flow<Candle> = callbackFlow {
-        val stream = "${symbol.lowercase()}@kline_${timeframe.interval}"
+        val interval = getBinanceSupportedInterval(timeframe)
+        val stream = "${symbol.lowercase()}@kline_$interval"
         val request = Request.Builder().url("$wsBaseUrl/$stream").build()
 
         val webSocket = client.newWebSocket(request, object : WebSocketListener() {

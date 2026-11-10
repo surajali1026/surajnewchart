@@ -24,6 +24,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.tradingview.binancefutures.domain.model.AlertCondition
+import com.tradingview.binancefutures.domain.model.ConnectionStatus
 import com.tradingview.binancefutures.domain.model.Timeframe
 import com.tradingview.binancefutures.presentation.ui.alerts.AlertsDialogCompose
 import com.tradingview.binancefutures.presentation.ui.chart.CandlestickChartCompose
@@ -107,6 +108,7 @@ class MainActivity : ComponentActivity() {
                                 activeDrawingTool = uiState.activeDrawingTool,
                                 selectedDrawingId = uiState.selectedDrawingId,
                                 alerts = uiState.alerts,
+                                serverTimeOffset = uiState.serverTimeOffset,
                                 onSelectDrawing = { viewModel.selectDrawing(it) },
                                 onAddDrawing = { viewModel.addDrawing(it) },
                                 onUpdateDrawing = { viewModel.updateDrawing(it) },
@@ -252,9 +254,14 @@ class MainActivity : ComponentActivity() {
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
+                                val statusColor = when (uiState.connectionStatus) {
+                                    ConnectionStatus.CONNECTED -> TVBullishGreen
+                                    ConnectionStatus.CONNECTING, ConnectionStatus.RECONNECTING -> Color(0xFFFF9800)
+                                    ConnectionStatus.ERROR -> TVBearishRed
+                                }
                                 Text(
-                                    text = "Binance USD-M Live · ${uiState.priceType.name}",
-                                    color = TVBullishGreen,
+                                    text = "● ${uiState.connectionStatus.name} · ${uiState.priceType.name}",
+                                    color = statusColor,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.SemiBold
                                 )

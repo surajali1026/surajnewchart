@@ -21,6 +21,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.FontWeight
@@ -44,6 +45,7 @@ fun CandlestickChartCompose(
     activeDrawingTool: DrawingType?,
     selectedDrawingId: String?,
     alerts: List<PriceAlert> = emptyList(),
+    serverTimeOffset: Long = 0L,
     onSelectDrawing: (String?) -> Unit,
     onAddDrawing: (Drawing) -> Unit,
     onUpdateDrawing: (Drawing) -> Unit,
@@ -56,6 +58,15 @@ fun CandlestickChartCompose(
     var priceScaleMultiplier by remember { mutableFloatStateOf(1f) }
     var pricePanOffset by remember { mutableFloatStateOf(0f) }
     var crosshairPosition by remember { mutableStateOf<Offset?>(null) }
+
+    // Live clock ticker for real-time candle countdown
+    var currentClockTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(1000L)
+            currentClockTime = System.currentTimeMillis()
+        }
+    }
 
     // Live Drawing points in progress
     var liveDragStart by remember { mutableStateOf<Offset?>(null) }
@@ -155,8 +166,9 @@ fun CandlestickChartCompose(
 
                         // Zooming candles or price scale
                         if (centroid.x > chartWidth) {
-                            // Touch on price scale stretches/compresses price vertically
-                            priceScaleMultiplier = (priceScaleMultiplier * zoom).coerceIn(0.15f, 6.0f)
+                            // Touch or drag on price scale stretches/compresses price vertically
+                            val dragRatio = if (pan.y != 0f) (1f - pan.y * 0.008f) else 1f
+                            priceScaleMultiplier = (priceScaleMultiplier * zoom * dragRatio).coerceIn(0.15f, 10.0f)
                         } else {
                             // Touch on main chart zooms candles horizontally
                             candleWidth = (candleWidth * zoom).coerceIn(6f, 100f)
@@ -169,6 +181,14 @@ fun CandlestickChartCompose(
                     detectTapGestures(
                         onTap = { offset ->
                             crosshairPosition = offset
+                        },
+                        onDoubleTap = { offset ->
+                            val chartWidth = size.width - 150f
+                            if (offset.x > chartWidth) {
+                                // Double tap on right price scale resets zoom & vertical pan
+                                priceScaleMultiplier = 1f
+                                pricePanOffset = 0f
+                            }
                         }
                     )
                 }
@@ -198,12 +218,13 @@ fun CandlestickChartCompose(
                 return chartHeight - ((price - displayMin) / priceRange) * chartHeight
             }
 
+            val rightMarginBars = 8f
             fun indexToX(idx: Int): Float {
                 val offsetFromEnd = endIndex - idx
-                return chartWidth - (offsetFromEnd + 0.5f) * candleWidth
+                return chartWidth - (offsetFromEnd + rightMarginBars) * candleWidth
             }
 
-            // Draw grid lines
+            // Draw grid lines and price text
             val numSteps = 6
             for (i in 0..numSteps) {
                 val p = displayMin + (priceRange / numSteps) * i
@@ -222,51 +243,176 @@ fun CandlestickChartCompose(
                 )
             }
 
-            // Draw Candlesticks
-            for (i in startIndex..endIndex) {
-                val c = candles[i]
-                val x = indexToX(i)
-                val isBull = c.close >= c.open
-                val color = if (isBull) TVBullishGreen else TVBearishRed
+            // Draw Candlesticks & Drawings clipped strictly within chart area so they never touch or overlap the price scale
+            clipRect(left = 0f, top = 0f, right = chartWidth, bottom = chartHeight) {
+                for (i in startIndex..endIndex) {
+                    val c = candles[i]
+                    val x = indexToX(i)
+                    val isBull = c.close >= c.open
+                    val color = if (isBull) TVBullishGreen else TVBearishRed
 
-                val openY = priceToY(c.open)
-                val closeY = priceToY(c.close)
-                val highY = priceToY(c.high)
-                val lowY = priceToY(c.low)
+                    val openY = priceToY(c.open)
+                    val closeY = priceToY(c.close)
+                    val highY = priceToY(c.high)
+                    val lowY = priceToY(c.low)
 
-                val bodyTop = min(openY, closeY)
-                val bodyHeight = max(Math.abs(closeY - openY), 2f)
-                val barW = max(candleWidth * 0.7f, 2f)
+                    val bodyTop = min(openY, closeY)
+                    val bodyHeight = max(Math.abs(closeY - openY), 2f)
+                    val barW = max(candleWidth * 0.7f, 2f)
 
-                // Wick
-                drawLine(
-                    color = color,
-                    start = Offset(x, highY),
-                    end = Offset(x, lowY),
-                    strokeWidth = 2f
-                )
+                    // Wick
+                    drawLine(
+                        color = color,
+                        start = Offset(x, highY),
+                        end = Offset(x, lowY),
+                        strokeWidth = 2f
+                    )
 
-                // Body
-                drawRect(
-                    color = color,
-                    topLeft = Offset(x - barW / 2f, bodyTop),
-                    size = Size(barW, bodyHeight)
-                )
+                    // Body
+                    drawRect(
+                        color = color,
+                        topLeft = Offset(x - barW / 2f, bodyTop),
+                        size = Size(barW, bodyHeight)
+                    )
+                }
+
+                // Active Alerts Dotted Lines inside chart
+                val activeAlerts = alerts.filter { it.symbol == symbol && it.isEnabled && !it.isTriggered }
+                activeAlerts.forEach { alert ->
+                    val alertY = priceToY(alert.targetPrice)
+                    if (alertY in 0f..chartHeight) {
+                        drawLine(
+                            color = Color(0xFFFF9800),
+                            start = Offset(0f, alertY),
+                            end = Offset(chartWidth, alertY),
+                            strokeWidth = 1.5f,
+                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(5f, 5f))
+                        )
+                    }
+                }
+
+                // Saved Drawings
+                drawings.forEach { drawing ->
+                    val isSelected = drawing.id == selectedDrawingId
+                    val strokeW = if (isSelected) drawing.strokeWidth + 2f else drawing.strokeWidth
+
+                    when (drawing.type) {
+                        DrawingType.HORIZONTAL_LINE -> {
+                            val p = drawing.points.firstOrNull() ?: return@forEach
+                            val y = priceToY(p.price)
+                            drawLine(
+                                color = Color(drawing.color),
+                                start = Offset(0f, y),
+                                end = Offset(chartWidth, y),
+                                strokeWidth = strokeW,
+                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f))
+                            )
+                        }
+                        DrawingType.TRENDLINE -> {
+                            if (drawing.points.size >= 2) {
+                                val y1 = priceToY(drawing.points[0].price)
+                                val y2 = priceToY(drawing.points[1].price)
+                                val x1 = chartWidth * 0.3f
+                                val x2 = chartWidth * 0.85f
+                                drawLine(
+                                    color = Color(drawing.color),
+                                    start = Offset(x1, y1),
+                                    end = Offset(x2, y2),
+                                    strokeWidth = strokeW
+                                )
+                            }
+                        }
+                        DrawingType.RECTANGLE -> {
+                            if (drawing.points.size >= 2) {
+                                val y1 = priceToY(drawing.points[0].price)
+                                val y2 = priceToY(drawing.points[1].price)
+                                val top = min(y1, y2)
+                                val h = Math.abs(y2 - y1)
+                                drawRect(
+                                    color = Color(drawing.color).copy(alpha = 0.25f),
+                                    topLeft = Offset(chartWidth * 0.2f, top),
+                                    size = Size(chartWidth * 0.6f, h)
+                                )
+                            }
+                        }
+                        DrawingType.PRICE_RANGE -> {
+                            if (drawing.points.size >= 2) {
+                                val y1 = priceToY(drawing.points[0].price)
+                                val y2 = priceToY(drawing.points[1].price)
+                                val top = min(y1, y2)
+                                val h = Math.abs(y2 - y1)
+                                val diff = drawing.points[1].price - drawing.points[0].price
+                                val isGain = diff >= 0f
+                                val rangeColor = if (isGain) TVBullishGreen else TVBearishRed
+                                drawRect(
+                                    color = rangeColor.copy(alpha = 0.25f),
+                                    topLeft = Offset(chartWidth * 0.25f, top),
+                                    size = Size(chartWidth * 0.5f, h)
+                                )
+                                val pct = if (drawing.points[0].price != 0f) (diff / drawing.points[0].price) * 100f else 0f
+                                drawText(
+                                    textMeasurer = textMeasurer,
+                                    text = String.format(Locale.US, "%s%.2f%%", if (isGain) "+" else "", pct),
+                                    topLeft = Offset(chartWidth * 0.35f, top + 4f),
+                                    style = TextStyle(color = rangeColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                )
+                            }
+                        }
+                        else -> Unit
+                    }
+                }
+
+                // Live In-Progress Drawing Preview
+                if (liveDragStart != null && liveDragCurrent != null) {
+                    val start = liveDragStart!!
+                    val curr = liveDragCurrent!!
+
+                    when (activeDrawingTool) {
+                        DrawingType.TRENDLINE -> {
+                            drawLine(
+                                color = TVPrimaryBlue,
+                                start = start,
+                                end = curr,
+                                strokeWidth = 3f
+                            )
+                        }
+                        DrawingType.RECTANGLE -> {
+                            val left = min(start.x, curr.x)
+                            val top = min(start.y, curr.y)
+                            val w = Math.abs(curr.x - start.x)
+                            val h = Math.abs(curr.y - start.y)
+                            drawRect(
+                                color = TVPrimaryBlue.copy(alpha = 0.25f),
+                                topLeft = Offset(left, top),
+                                size = Size(w, h)
+                            )
+                            drawLine(color = TVPrimaryBlue, start = Offset(left, top), end = Offset(left + w, top), strokeWidth = 2f)
+                            drawLine(color = TVPrimaryBlue, start = Offset(left, top + h), end = Offset(left + w, top + h), strokeWidth = 2f)
+                        }
+                        DrawingType.PRICE_RANGE -> {
+                            val left = min(start.x, curr.x)
+                            val top = min(start.y, curr.y)
+                            val w = max(Math.abs(curr.x - start.x), 80f)
+                            val h = Math.abs(curr.y - start.y)
+                            val isGain = curr.y <= start.y
+                            val cColor = if (isGain) TVBullishGreen else TVBearishRed
+                            drawRect(
+                                color = cColor.copy(alpha = 0.3f),
+                                topLeft = Offset(left, top),
+                                size = Size(w, h)
+                            )
+                        }
+                        else -> Unit
+                    }
+                }
             }
 
-            // Draw Active Alerts (Dotted horizontal lines + clean price scale label)
+            // Draw Active Alerts Price Tags on the Right Scale
             val activeAlerts = alerts.filter { it.symbol == symbol && it.isEnabled && !it.isTriggered }
             activeAlerts.forEach { alert ->
                 val alertY = priceToY(alert.targetPrice)
                 if (alertY in 0f..chartHeight) {
                     val alertColor = Color(0xFFFF9800)
-                    drawLine(
-                        color = alertColor,
-                        start = Offset(0f, alertY),
-                        end = Offset(chartWidth, alertY),
-                        strokeWidth = 1.5f,
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(5f, 5f))
-                    )
                     drawRect(
                         color = alertColor,
                         topLeft = Offset(chartWidth, alertY - 11f),
@@ -278,121 +424,6 @@ fun CandlestickChartCompose(
                         topLeft = Offset(chartWidth + 10f, alertY - 7f),
                         style = TextStyle(color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     )
-                }
-            }
-
-            // Draw Saved Drawings
-            drawings.forEach { drawing ->
-                val isSelected = drawing.id == selectedDrawingId
-                val strokeW = if (isSelected) drawing.strokeWidth + 2f else drawing.strokeWidth
-
-                when (drawing.type) {
-                    DrawingType.HORIZONTAL_LINE -> {
-                        val p = drawing.points.firstOrNull() ?: return@forEach
-                        val y = priceToY(p.price)
-                        drawLine(
-                            color = Color(drawing.color),
-                            start = Offset(0f, y),
-                            end = Offset(chartWidth, y),
-                            strokeWidth = strokeW,
-                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f))
-                        )
-                    }
-                    DrawingType.TRENDLINE -> {
-                        if (drawing.points.size >= 2) {
-                            val y1 = priceToY(drawing.points[0].price)
-                            val y2 = priceToY(drawing.points[1].price)
-                            val x1 = chartWidth * 0.3f
-                            val x2 = chartWidth * 0.85f
-                            drawLine(
-                                color = Color(drawing.color),
-                                start = Offset(x1, y1),
-                                end = Offset(x2, y2),
-                                strokeWidth = strokeW
-                            )
-                        }
-                    }
-                    DrawingType.RECTANGLE -> {
-                        if (drawing.points.size >= 2) {
-                            val y1 = priceToY(drawing.points[0].price)
-                            val y2 = priceToY(drawing.points[1].price)
-                            val top = min(y1, y2)
-                            val h = Math.abs(y2 - y1)
-                            drawRect(
-                                color = Color(drawing.color).copy(alpha = 0.25f),
-                                topLeft = Offset(chartWidth * 0.2f, top),
-                                size = Size(chartWidth * 0.6f, h)
-                            )
-                        }
-                    }
-                    DrawingType.PRICE_RANGE -> {
-                        if (drawing.points.size >= 2) {
-                            val y1 = priceToY(drawing.points[0].price)
-                            val y2 = priceToY(drawing.points[1].price)
-                            val top = min(y1, y2)
-                            val h = Math.abs(y2 - y1)
-                            val diff = drawing.points[1].price - drawing.points[0].price
-                            val isGain = diff >= 0f
-                            val rangeColor = if (isGain) TVBullishGreen else TVBearishRed
-                            drawRect(
-                                color = rangeColor.copy(alpha = 0.25f),
-                                topLeft = Offset(chartWidth * 0.25f, top),
-                                size = Size(chartWidth * 0.5f, h)
-                            )
-                            val pct = if (drawing.points[0].price != 0f) (diff / drawing.points[0].price) * 100f else 0f
-                            drawText(
-                                textMeasurer = textMeasurer,
-                                text = String.format(Locale.US, "%s%.2f%%", if (isGain) "+" else "", pct),
-                                topLeft = Offset(chartWidth * 0.35f, top + 4f),
-                                style = TextStyle(color = rangeColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            )
-                        }
-                    }
-                    else -> Unit
-                }
-            }
-
-            // Live In-Progress Drawing Preview (While user is dragging on screen)
-            if (liveDragStart != null && liveDragCurrent != null) {
-                val start = liveDragStart!!
-                val curr = liveDragCurrent!!
-
-                when (activeDrawingTool) {
-                    DrawingType.TRENDLINE -> {
-                        drawLine(
-                            color = TVPrimaryBlue,
-                            start = start,
-                            end = curr,
-                            strokeWidth = 3f
-                        )
-                    }
-                    DrawingType.RECTANGLE -> {
-                        val left = min(start.x, curr.x)
-                        val top = min(start.y, curr.y)
-                        val w = Math.abs(curr.x - start.x)
-                        val h = Math.abs(curr.y - start.y)
-                        drawRect(
-                            color = TVPrimaryBlue.copy(alpha = 0.25f),
-                            topLeft = Offset(left, top),
-                            size = Size(w, h)
-                        )
-                        drawLine(color = TVPrimaryBlue, start = Offset(left, top), end = Offset(left + w, top), strokeWidth = 2f)
-                        drawLine(color = TVPrimaryBlue, start = Offset(left, top + h), end = Offset(left + w, top + h), strokeWidth = 2f)
-                    }
-                    DrawingType.PRICE_RANGE -> {
-                        val left = min(start.x, curr.x)
-                        val top = min(start.y, curr.y)
-                        val w = max(Math.abs(curr.x - start.x), 80f)
-                        val h = Math.abs(curr.y - start.y)
-                        val isGain = curr.y <= start.y
-                        val cColor = if (isGain) TVBullishGreen else TVBearishRed
-                        drawRect(
-                            color = cColor.copy(alpha = 0.3f),
-                            topLeft = Offset(left, top),
-                            size = Size(w, h)
-                        )
-                    }
-                    else -> Unit
                 }
             }
 
@@ -423,6 +454,33 @@ fun CandlestickChartCompose(
                 style = TextStyle(color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             )
 
+            // Real-Time Bar Countdown Timer under current price on the price scale
+            val candleEndTime = last.time + timeframe.durationMs
+            val effectiveTime = currentClockTime + serverTimeOffset
+            val remainingSec = max(0L, (candleEndTime - effectiveTime) / 1000L)
+            val countdownStr = if (remainingSec >= 3600L) {
+                val h = remainingSec / 3600
+                val m = (remainingSec % 3600) / 60
+                val s = remainingSec % 60
+                String.format(Locale.US, "%02d:%02d:%02d", h, m, s)
+            } else {
+                val m = remainingSec / 60
+                val s = remainingSec % 60
+                String.format(Locale.US, "%02d:%02d", m, s)
+            }
+
+            drawRect(
+                color = TVSurface.copy(alpha = 0.95f),
+                topLeft = Offset(chartWidth, lastY + 13f),
+                size = Size(140f, 20f)
+            )
+            drawText(
+                textMeasurer = textMeasurer,
+                text = countdownStr,
+                topLeft = Offset(chartWidth + 10f, lastY + 16f),
+                style = TextStyle(color = TVTextSecondary, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+            )
+
             // Crosshair
             crosshairPosition?.let { pos ->
                 if (pos.x in 0f..chartWidth && pos.y in 0f..chartHeight) {
@@ -444,13 +502,50 @@ fun CandlestickChartCompose(
             }
         }
 
-        // Top HUD Header (Symbol, Timeframe, OHLC)
+        // Top-Right Auto-Scale / Reset Button
+        Surface(
+            onClick = {
+                priceScaleMultiplier = 1f
+                pricePanOffset = 0f
+            },
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
+            color = TVCard.copy(alpha = 0.9f),
+            border = androidx.compose.foundation.BorderStroke(1.dp, TVBorder),
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 6.dp, end = 6.dp)
+        ) {
+            Text(
+                text = if (priceScaleMultiplier != 1f || pricePanOffset != 0f) "AUTO ●" else "AUTO",
+                color = if (priceScaleMultiplier != 1f || pricePanOffset != 0f) TVPrimaryBlue else TVTextSecondary,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+            )
+        }
+
+        // Top HUD Header (Symbol, Timeframe, OHLC, Bar Countdown)
         if (candles.isNotEmpty()) {
             val last = candles.last()
+            val candleEndTime = last.time + timeframe.durationMs
+            val effectiveTime = currentClockTime + serverTimeOffset
+            val remainingSec = max(0L, (candleEndTime - effectiveTime) / 1000L)
+            val countdownStr = if (remainingSec >= 3600L) {
+                val h = remainingSec / 3600
+                val m = (remainingSec % 3600) / 60
+                val s = remainingSec % 60
+                String.format(Locale.US, "%02d:%02d:%02d", h, m, s)
+            } else {
+                val m = remainingSec / 60
+                val s = remainingSec % 60
+                String.format(Locale.US, "%02d:%02d", m, s)
+            }
+
             Row(
                 modifier = Modifier
                     .padding(horizontal = 8.dp, vertical = 6.dp)
                     .align(Alignment.TopStart),
+                verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text("$symbol · ${timeframe.displayName}", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
@@ -458,6 +553,18 @@ fun CandlestickChartCompose(
                 Text("H: ${String.format(Locale.US, "%.2f", last.high)}", color = TVTextSecondary, fontSize = 10.sp)
                 Text("L: ${String.format(Locale.US, "%.2f", last.low)}", color = TVTextSecondary, fontSize = 10.sp)
                 Text("C: ${String.format(Locale.US, "%.2f", last.close)}", color = if (last.close >= last.open) TVBullishGreen else TVBearishRed, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Surface(
+                    color = TVCard.copy(alpha = 0.85f),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp)
+                ) {
+                    Text(
+                        text = "⏱ $countdownStr",
+                        color = TVPrimaryBlue,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                    )
+                }
             }
         }
 
