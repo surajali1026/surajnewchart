@@ -905,20 +905,24 @@ fun CandlestickChartCompose(
                             )
                         }
 
-                        // Delete Drawing
-                        IconButton(
+                        // Large, clearly labelled delete action for the selected drawing.
+                        Surface(
                             onClick = {
                                 onDeleteDrawing(d.id)
                                 onSelectDrawing(null)
                             },
-                            modifier = Modifier.size(32.dp)
+                            color = TVBearishRed.copy(alpha = 0.16f),
+                            shape = RoundedCornerShape(6.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, TVBearishRed.copy(alpha = 0.6f))
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Delete,
-                                contentDescription = "Delete Drawing",
-                                tint = TVBearishRed,
-                                modifier = Modifier.size(18.dp)
-                            )
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(Icons.Default.Delete, contentDescription = "Delete Drawing", tint = TVBearishRed, modifier = Modifier.size(16.dp))
+                                Text("Delete", color = TVBearishRed, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
 
                         // Close Toolbar / Deselect
