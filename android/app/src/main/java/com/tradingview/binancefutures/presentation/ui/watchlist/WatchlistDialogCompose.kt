@@ -25,7 +25,7 @@ import com.tradingview.binancefutures.presentation.ui.theme.*
 import java.util.Locale
 
 enum class WatchlistTab {
-    WATCHLIST, TOP_100, GAINERS, LOSERS
+    ALL, WATCHLIST, TOP_100, GAINERS, LOSERS
 }
 
 @Composable
@@ -40,21 +40,22 @@ fun WatchlistDialogCompose(
 ) {
     if (!isOpen) return
 
-    var selectedTab by remember { mutableStateOf(WatchlistTab.WATCHLIST) }
+    var selectedTab by remember { mutableStateOf(WatchlistTab.ALL) }
     var searchQuery by remember { mutableStateOf("") }
 
     val filteredList = remember(pairs, selectedTab, searchQuery, favorites) {
-        val baseList = when (selectedTab) {
-            WatchlistTab.WATCHLIST -> pairs.filter { favorites.contains(it.symbol) }
-            WatchlistTab.TOP_100 -> pairs.sortedByDescending { it.quoteVolume }.take(100)
-            WatchlistTab.GAINERS -> pairs.sortedByDescending { it.priceChangePercent }.take(50)
-            WatchlistTab.LOSERS -> pairs.sortedBy { it.priceChangePercent }.take(50)
-        }
-        if (searchQuery.isBlank()) {
-            baseList
-        } else {
+        if (searchQuery.isNotBlank()) {
             val q = searchQuery.trim().uppercase()
-            baseList.filter { it.symbol.contains(q) || it.baseAsset.contains(q) }
+            // When user is searching, search ALL Binance Futures coins across symbol and base asset!
+            pairs.filter { it.symbol.contains(q) || it.baseAsset.contains(q) }
+        } else {
+            when (selectedTab) {
+                WatchlistTab.ALL -> pairs
+                WatchlistTab.WATCHLIST -> pairs.filter { favorites.contains(it.symbol) }
+                WatchlistTab.TOP_100 -> pairs.sortedByDescending { it.quoteVolume }.take(100)
+                WatchlistTab.GAINERS -> pairs.sortedByDescending { it.priceChangePercent }
+                WatchlistTab.LOSERS -> pairs.sortedBy { it.priceChangePercent }
+            }
         }
     }
 
@@ -139,6 +140,7 @@ fun WatchlistDialogCompose(
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     val tabs = listOf(
+                        WatchlistTab.ALL to "All (${pairs.size})",
                         WatchlistTab.WATCHLIST to "Favs",
                         WatchlistTab.TOP_100 to "Top 100",
                         WatchlistTab.GAINERS to "Gainers",

@@ -13,7 +13,7 @@ interface WatchlistModalProps {
   onToggleFavorite: (symbol: string) => void;
 }
 
-type TabType = 'watchlist' | 'top100' | 'gainers' | 'losers';
+type TabType = 'all' | 'watchlist' | 'top100' | 'gainers' | 'losers';
 
 export const WatchlistModal: React.FC<WatchlistModalProps> = ({
   isOpen,
@@ -24,7 +24,7 @@ export const WatchlistModal: React.FC<WatchlistModalProps> = ({
   favorites,
   onToggleFavorite,
 }) => {
-  const [activeTab, setActiveTab] = useState<TabType>('watchlist');
+  const [activeTab, setActiveTab] = useState<TabType>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   // 1. My Watchlist items
@@ -47,22 +47,20 @@ export const WatchlistModal: React.FC<WatchlistModalProps> = ({
     return [...pairs].sort((a, b) => a.priceChangePercent - b.priceChangePercent).slice(0, 50);
   }, [pairs]);
 
-  // Active items based on selected tab
-  const tabItems = useMemo(() => {
+  // Filtered by search query across entire pairs list, or active category tab
+  const filteredItems = useMemo(() => {
+    if (searchQuery.trim()) {
+      const q = searchQuery.toUpperCase();
+      return pairs.filter((item) => item.symbol.includes(q) || item.baseAsset.includes(q));
+    }
     switch (activeTab) {
+      case 'all': return pairs;
       case 'watchlist': return watchlistItems;
       case 'top100': return top100Items;
       case 'gainers': return topGainers;
       case 'losers': return topLosers;
     }
-  }, [activeTab, watchlistItems, top100Items, topGainers, topLosers]);
-
-  // Filtered by search query
-  const filteredItems = useMemo(() => {
-    if (!searchQuery.trim()) return tabItems;
-    const q = searchQuery.toUpperCase();
-    return tabItems.filter((item) => item.symbol.includes(q) || item.baseAsset.includes(q));
-  }, [tabItems, searchQuery]);
+  }, [activeTab, pairs, watchlistItems, top100Items, topGainers, topLosers, searchQuery]);
 
   if (!isOpen) return null;
 
@@ -114,6 +112,17 @@ export const WatchlistModal: React.FC<WatchlistModalProps> = ({
 
         {/* 4-Part Tabs (Watchlist, Top 100, Gainers, Losers) */}
         <div className="flex items-center gap-1 px-3 py-1.5 bg-[#131722] border-b border-[#242731] overflow-x-auto text-xs font-medium">
+          <button
+            onClick={() => setActiveTab('all')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors cursor-pointer ${
+              activeTab === 'all'
+                ? 'bg-[#2962ff] text-white shadow-sm'
+                : 'text-[#787b86] hover:text-[#d1d4dc] hover:bg-[#1e222d]'
+            }`}
+          >
+            <span>All ({pairs.length})</span>
+          </button>
+
           <button
             onClick={() => setActiveTab('watchlist')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors cursor-pointer ${

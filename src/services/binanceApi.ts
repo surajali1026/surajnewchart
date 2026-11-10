@@ -31,18 +31,22 @@ export async function fetchFuturesTickers(): Promise<TradingPair[]> {
   if (!Array.isArray(data)) return [];
 
   return data
-    .filter((item: any) => item.symbol.endsWith('USDT'))
-    .map((item: any) => ({
-      symbol: item.symbol,
-      baseAsset: item.symbol.replace('USDT', ''),
-      quoteAsset: 'USDT',
-      price: parseFloat(item.lastPrice) || 0,
-      priceChangePercent: parseFloat(item.priceChangePercent) || 0,
-      highPrice: parseFloat(item.highPrice) || 0,
-      lowPrice: parseFloat(item.lowPrice) || 0,
-      volume: parseFloat(item.volume) || 0,
-      quoteVolume: parseFloat(item.quoteVolume) || 0,
-    }))
+    .filter((item: any) => item.symbol && (item.symbol.endsWith('USDT') || item.symbol.endsWith('USDC')))
+    .map((item: any) => {
+      const isUsdt = item.symbol.endsWith('USDT');
+      const quoteAsset = isUsdt ? 'USDT' : 'USDC';
+      return {
+        symbol: item.symbol,
+        baseAsset: item.symbol.replace(quoteAsset, ''),
+        quoteAsset,
+        price: parseFloat(item.lastPrice) || 0,
+        priceChangePercent: parseFloat(item.priceChangePercent) || 0,
+        highPrice: parseFloat(item.highPrice) || 0,
+        lowPrice: parseFloat(item.lowPrice) || 0,
+        volume: parseFloat(item.volume) || 0,
+        quoteVolume: parseFloat(item.quoteVolume) || 0,
+      };
+    })
     .sort((a, b) => b.quoteVolume - a.quoteVolume);
 }
 
