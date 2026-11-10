@@ -101,3 +101,19 @@ data class BarReplayState(
     val isPlaying: Boolean = false,
     val speedMs: Long = 1000L
 )
+
+/** Format futures prices without truncating low-priced symbols to two decimals. */
+fun formatMarketPrice(price: Float): String {
+    if (!price.isFinite()) return "--"
+    val value = kotlin.math.abs(price)
+    val decimals = when {
+        value >= 100f -> 2
+        value >= 1f -> 4
+        value >= 0.01f -> 6
+        else -> 8
+    }
+    return java.math.BigDecimal.valueOf(price.toDouble())
+        .setScale(decimals, java.math.RoundingMode.HALF_UP)
+        .stripTrailingZeros()
+        .toPlainString()
+}
