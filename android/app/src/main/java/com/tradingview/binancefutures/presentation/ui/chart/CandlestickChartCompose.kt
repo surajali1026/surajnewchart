@@ -37,6 +37,7 @@ import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 private fun distanceToSegment(px: Float, py: Float, x1: Float, y1: Float, x2: Float, y2: Float): Float {
@@ -268,6 +269,7 @@ fun CandlestickChartCompose(
                                 var lastPos = startPos
                                 var totalMovement = 0f
                                 var isPinching = false
+                                var isCrosshairDragging = false
                                 var previousDistance = 0f
                                 var currentVelocity = 0f
                                 var lastVelocityTime = startTime
@@ -286,6 +288,17 @@ fun CandlestickChartCompose(
                                         val dist = (currentPos - startPos).getDistance()
                                         if (dist > totalMovement) totalMovement = dist
 
+                                        // Long-press then drag to inspect individual candles without moving the chart.
+                                        if (!isMovingDrawing && startPos.x <= chartWidth &&
+                                            currentTime - startTime >= 350L && totalMovement < 16f
+                                        ) {
+                                            isCrosshairDragging = true
+                                        }
+                                        if (isCrosshairDragging) {
+                                            crosshairPosition = currentPos
+                                            change.consume()
+                                        }
+
                                         val dt = (currentTime - lastVelocityTime).coerceAtLeast(1L)
                                         val instVel = (pan.x / dt.toFloat()) * 1000f
                                         if (!instVel.isNaN() && !instVel.isInfinite()) {
@@ -293,7 +306,9 @@ fun CandlestickChartCompose(
                                         }
                                         lastVelocityTime = currentTime
 
-                                        if (isMovingDrawing && selectedDrawing != null) {
+                                        if (isCrosshairDragging) {
+                                            // Crosshair owns this gesture; do not pan the candle series.
+                                        } else if (isMovingDrawing && selectedDrawing != null) {
                                             val deltaTime = xToTime(currentPos.x) - xToTime(lastPos.x)
                                             val deltaPrice = yToPrice(currentPos.y) - yToPrice(lastPos.y)
                                             val updated = selectedDrawing.points.map { pt ->
@@ -385,7 +400,7 @@ fun CandlestickChartCompose(
 
                                 val duration = System.currentTimeMillis() - startTime
 
-                                if (duration < 300L && totalMovement < 16f && !isPinching) {
+                                if (!isCrosshairDragging && duration < 300L && totalMovement < 16f && !isPinching) {
                                     if (startPos.x > chartWidth) {
                                         val now = System.currentTimeMillis()
                                         if (now - lastPriceScaleTap < 350L) {
@@ -791,9 +806,17 @@ fun CandlestickChartCompose(
                 )
             }
 
-            // Top HUD Header
-            candles.lastOrNull()?.let { last ->
-                val candleEndTime = last.time + timeframe.durationMs
+            // Top HUD Header: show the candle under the crosshair, otherwise the live candle.
+            val crosshairCandle = crosshairPosition
+                ?.takeIf { it.x in 0f..chartWidth && it.y in 0f..chartHeight && candles.isNotEmpty() }
+                ?.let { pos ->
+                    val index = (lastBarIndex + rightMarginBars - scrollOffset -
+                        ((chartWidth - pos.x) / candleWidth.coerceAtLeast(1f))).roundToInt()
+                    candles.getOrNull(index.coerceIn(0, candles.lastIndex))
+                }
+            candles.lastOrNull()?.let { liveCandle ->
+                val displayCandle = crosshairCandle ?: liveCandle
+                val candleEndTime = liveCandle.time + timeframe.durationMs
                 val effectiveTime = currentClockTime + serverTimeOffset
                 val remainingSec = max(0L, (candleEndTime - effectiveTime) / 1000L)
                 val countdownStr = if (remainingSec >= 3600L) {
@@ -815,10 +838,10 @@ fun CandlestickChartCompose(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text("$symbol · ${timeframe.displayName}", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    Text("O: ${String.format(Locale.US, "%.2f", last.open)}", color = TVTextSecondary, fontSize = 10.sp)
-                    Text("H: ${String.format(Locale.US, "%.2f", last.high)}", color = TVTextSecondary, fontSize = 10.sp)
-                    Text("L: ${String.format(Locale.US, "%.2f", last.low)}", color = TVTextSecondary, fontSize = 10.sp)
-                    Text("C: ${String.format(Locale.US, "%.2f", last.close)}", color = if (last.close >= last.open) TVBullishGreen else TVBearishRed, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text("O: ${String.format(Locale.US, "%.2f", displayCandle.open)}", color = TVTextSecondary, fontSize = 10.sp)
+                    Text("H: ${String.format(Locale.US, "%.2f", displayCandle.high)}", color = TVTextSecondary, fontSize = 10.sp)
+                    Text("L: ${String.format(Locale.US, "%.2f", displayCandle.low)}", color = TVTextSecondary, fontSize = 10.sp)
+                    Text("C: ${String.format(Locale.US, "%.2f", displayCandle.close)}", color = if (displayCandle.close >= displayCandle.open) TVBullishGreen else TVBearishRed, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     Surface(
                         color = TVCard.copy(alpha = 0.85f),
                         shape = RoundedCornerShape(4.dp)
