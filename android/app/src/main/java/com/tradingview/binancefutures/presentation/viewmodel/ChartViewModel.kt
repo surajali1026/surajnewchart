@@ -160,25 +160,28 @@ class ChartViewModel @JvmOverloads constructor(
         saveFavoritesToDisk(updated)
     }
 
-    // Swipe coin navigation: Next & Previous coin in watchlist/pairs list
+    // Navigate within the saved favourites when the current coin is in the watchlist;
+    // otherwise keep the full Binance USD-M pair order.
+    private fun navigationPairs(): List<TradingPair> {
+        val state = _uiState.value
+        val favouritePairs = state.pairs.filter { state.favorites.contains(it.symbol) }
+            .sortedByDescending { it.quoteVolume }
+        return if (state.favorites.contains(state.symbol) && favouritePairs.isNotEmpty()) favouritePairs else state.pairs
+    }
+
     fun selectNextCoin() {
-        val pairs = _uiState.value.pairs
+        val pairs = navigationPairs()
         if (pairs.isEmpty()) return
         val currentIndex = pairs.indexOfFirst { it.symbol == _uiState.value.symbol }
-        if (currentIndex != -1 && currentIndex < pairs.size - 1) {
-            selectSymbol(pairs[currentIndex + 1].symbol)
-        } else if (currentIndex == -1 && pairs.isNotEmpty()) {
-            selectSymbol(pairs.first().symbol)
-        }
+        if (currentIndex >= 0 && currentIndex < pairs.lastIndex) selectSymbol(pairs[currentIndex + 1].symbol)
+        else if (currentIndex == -1) selectSymbol(pairs.first().symbol)
     }
 
     fun selectPreviousCoin() {
-        val pairs = _uiState.value.pairs
+        val pairs = navigationPairs()
         if (pairs.isEmpty()) return
         val currentIndex = pairs.indexOfFirst { it.symbol == _uiState.value.symbol }
-        if (currentIndex > 0) {
-            selectSymbol(pairs[currentIndex - 1].symbol)
-        }
+        if (currentIndex > 0) selectSymbol(pairs[currentIndex - 1].symbol)
     }
 
     private fun loadCandles(symbol: String, tf: Timeframe, pType: PriceType = _uiState.value.priceType) {
