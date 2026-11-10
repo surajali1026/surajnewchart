@@ -14,6 +14,7 @@ import okhttp3.*
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
+class BinanceRemoteDataSource(
     private val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
