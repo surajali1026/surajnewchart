@@ -112,6 +112,7 @@ class MainActivity : ComponentActivity() {
                                 onSelectDrawing = { viewModel.selectDrawing(it) },
                                 onAddDrawing = { viewModel.addDrawing(it) },
                                 onUpdateDrawing = { viewModel.updateDrawing(it) },
+                                onDeleteDrawing = { viewModel.deleteDrawing(it) },
                                 onSwipeNextCoin = { viewModel.selectNextCoin() },
                                 onSwipePreviousCoin = { viewModel.selectPreviousCoin() },
                                 modifier = Modifier.fillMaxSize()
