@@ -43,8 +43,6 @@ class ChartViewModel @JvmOverloads constructor(
     private val repository: TradingRepository = TradingRepositoryImpl()
 ) : AndroidViewModel(application) {
 
-    constructor(application: Application) : this(application, TradingRepositoryImpl())
-
     private val gson = Gson()
     private val prefs = application.getSharedPreferences("tradingview_binance_prefs", Context.MODE_PRIVATE)
 
