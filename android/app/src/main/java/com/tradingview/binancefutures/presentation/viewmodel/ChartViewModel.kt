@@ -202,26 +202,35 @@ class ChartViewModel @JvmOverloads constructor(
                     previousPrice = history.last().close
                 }
 
-                // 1. WebSocket Live Stream with auto-reconnection
+                // 1. WebSocket Live Stream with persistent auto-reconnection loop
                 wsJob = launch {
-                    repository.getLiveCandleStream(symbol, tf)
-                        .catch { 
+                    while (isActive) {
+                        try {
+                            repository.getLiveCandleStream(symbol, tf)
+                                .catch { 
+                                    _uiState.value = _uiState.value.copy(connectionStatus = ConnectionStatus.RECONNECTING)
+                                }
+                                .collect { updatedCandle ->
+                                    _uiState.value = _uiState.value.copy(connectionStatus = ConnectionStatus.CONNECTED)
+                                    handleCandleUpdate(updatedCandle)
+                                }
+                        } catch (e: Exception) {
                             _uiState.value = _uiState.value.copy(connectionStatus = ConnectionStatus.RECONNECTING)
                         }
-                        .collect { updatedCandle ->
-                            _uiState.value = _uiState.value.copy(connectionStatus = ConnectionStatus.CONNECTED)
-                            handleCandleUpdate(updatedCandle)
-                        }
+                        delay(2500L) // Persistent auto-reconnect after 2.5s if WebSocket disconnects
+                    }
                 }
 
-                // 2. High-Frequency REST Poller Fallback (ensures live candle updates continuously even if WS is throttled on mobile)
+                // 2. Gentle Fallback Poller (runs every 10s only when disconnected, preventing socket exhaustion & OOM)
                 pollJob = launch {
                     while (isActive) {
-                        delay(1200)
+                        delay(10_000L)
                         try {
-                            val latest = repository.getHistoricalCandles(symbol, tf, pType)
-                            if (latest.isNotEmpty()) {
-                                handleCandleUpdate(latest.last())
+                            if (_uiState.value.connectionStatus != ConnectionStatus.CONNECTED) {
+                                val latest = repository.getHistoricalCandles(symbol, tf, pType)
+                                if (latest.isNotEmpty()) {
+                                    handleCandleUpdate(latest.last())
+                                }
                             }
                         } catch (e: Exception) {
                             // ignore transient network hiccup

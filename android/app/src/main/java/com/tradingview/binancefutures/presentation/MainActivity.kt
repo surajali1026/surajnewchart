@@ -47,6 +47,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            android.util.Log.e("TradingApp", "Uncaught exception on thread ${thread.name}", throwable)
+        }
         setContent {
             TradingViewTheme {
                 val viewModel: ChartViewModel = viewModel(

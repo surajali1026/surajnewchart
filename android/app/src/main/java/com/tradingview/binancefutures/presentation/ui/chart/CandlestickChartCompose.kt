@@ -127,22 +127,30 @@ fun CandlestickChartCompose(
         val chartHeight = max(constraints.maxHeight.toFloat() - 40f, 100f)
 
         val (rawMinPrice, rawMaxPrice) = calculateBounds(chartWidth)
-        val priceRange = max(rawMaxPrice - rawMinPrice, max(rawMaxPrice * 0.001f, 1f)) * 1.1f / priceScaleMultiplier.coerceIn(0.1f, 10f)
-        val midPrice = ((rawMaxPrice + rawMinPrice) / 2f) + pricePanOffset
+        val validMultiplier = if (priceScaleMultiplier.isNaN() || priceScaleMultiplier <= 0f) 1f else priceScaleMultiplier.coerceIn(0.1f, 10f)
+        val validPanOffset = if (pricePanOffset.isNaN()) 0f else pricePanOffset
+        val priceRange = max(rawMaxPrice - rawMinPrice, max(rawMaxPrice * 0.001f, 1f)) * 1.1f / validMultiplier
+        val midPrice = ((rawMaxPrice + rawMinPrice) / 2f) + validPanOffset
         val displayMin = midPrice - priceRange / 2f
 
         fun priceToY(price: Float): Float {
-            if (priceRange <= 0f) return chartHeight / 2f
-            return chartHeight - ((price - displayMin) / priceRange) * chartHeight
+            if (price.isNaN() || priceRange <= 0f || priceRange.isNaN()) return chartHeight / 2f
+            val y = chartHeight - ((price - displayMin) / priceRange) * chartHeight
+            return if (y.isNaN() || y.isInfinite()) chartHeight / 2f else y
         }
 
         fun yToPrice(y: Float): Float {
-            return displayMin + ((chartHeight - y) / chartHeight) * priceRange
+            if (y.isNaN() || priceRange.isNaN()) return displayMin
+            val p = displayMin + ((chartHeight - y) / chartHeight) * priceRange
+            return if (p.isNaN() || p.isInfinite()) displayMin else p
         }
 
         fun indexToX(idx: Int): Float {
-            val barIndexFromRight = (lastBarIndex - idx.toFloat()) + rightMarginBars - scrollOffset
-            return chartWidth - barIndexFromRight * candleWidth
+            val safeWidth = if (candleWidth.isNaN() || candleWidth <= 0f) 24f else candleWidth
+            val safeScroll = if (scrollOffset.isNaN()) 0f else scrollOffset
+            val barIndexFromRight = (lastBarIndex - idx.toFloat()) + rightMarginBars - safeScroll
+            val x = chartWidth - barIndexFromRight * safeWidth
+            return if (x.isNaN() || x.isInfinite()) chartWidth / 2f else x
         }
 
         fun timeToX(time: Long): Float {
@@ -151,15 +159,20 @@ fun CandlestickChartCompose(
             val timeDelta = time - lastCandle.time
             val duration = max(timeframe.durationMs, 1000L)
             val barsFromLast = timeDelta.toDouble() / duration.toDouble()
-            val barIndexFromRight = -barsFromLast.toFloat() + rightMarginBars - scrollOffset
-            return chartWidth - barIndexFromRight * candleWidth
+            val safeWidth = if (candleWidth.isNaN() || candleWidth <= 0f) 24f else candleWidth
+            val safeScroll = if (scrollOffset.isNaN()) 0f else scrollOffset
+            val barIndexFromRight = -barsFromLast.toFloat() + rightMarginBars - safeScroll
+            val x = chartWidth - barIndexFromRight * safeWidth
+            return if (x.isNaN() || x.isInfinite()) chartWidth / 2f else x
         }
 
         fun xToTime(x: Float): Long {
-            if (candles.isEmpty() || candleWidth <= 0f) return System.currentTimeMillis()
+            val safeWidth = if (candleWidth.isNaN() || candleWidth <= 0f) 24f else candleWidth
+            val safeScroll = if (scrollOffset.isNaN()) 0f else scrollOffset
+            if (candles.isEmpty()) return System.currentTimeMillis()
             val lastCandle = candles.lastOrNull() ?: return System.currentTimeMillis()
-            val barIndexFromRight = (chartWidth - x) / candleWidth
-            val barsFromLast = rightMarginBars - scrollOffset - barIndexFromRight
+            val barIndexFromRight = (chartWidth - x) / safeWidth
+            val barsFromLast = rightMarginBars - safeScroll - barIndexFromRight
             val duration = max(timeframe.durationMs, 1000L)
             return (lastCandle.time + (barsFromLast * duration).toLong())
         }
@@ -275,7 +288,9 @@ fun CandlestickChartCompose(
 
                                         val dt = (currentTime - lastVelocityTime).coerceAtLeast(1L)
                                         val instVel = (pan.x / dt.toFloat()) * 1000f
-                                        currentVelocity = currentVelocity * 0.35f + instVel * 0.65f
+                                        if (!instVel.isNaN() && !instVel.isInfinite()) {
+                                            currentVelocity = (currentVelocity * 0.35f + instVel * 0.65f).coerceIn(-6000f, 6000f)
+                                        }
                                         lastVelocityTime = currentTime
 
                                         if (isMovingDrawing && selectedDrawing != null) {
@@ -287,17 +302,21 @@ fun CandlestickChartCompose(
                                             onUpdateDrawing(selectedDrawing.copy(points = updated))
                                             change.consume()
                                         } else if (startPos.x > chartWidth) {
-                                            if (pan.y != 0f) {
-                                                val scaleFactor = 1f - pan.y * 0.006f
+                                            if (pan.y != 0f && !pan.y.isNaN()) {
+                                                val scaleFactor = (1f - pan.y * 0.006f).coerceIn(0.8f, 1.2f)
                                                 priceScaleMultiplier = (priceScaleMultiplier * scaleFactor).coerceIn(0.1f, 10.0f)
                                             }
                                             change.consume()
                                         } else {
-                                            if (totalMovement > 6f) {
+                                            if (totalMovement > 6f && !pan.x.isNaN()) {
                                                 val minScroll = if (candles.size > 5) -(candles.size - 5).toFloat() else 0f
                                                 val maxScroll = 50f
-                                                scrollOffset = (scrollOffset + pan.x / candleWidth).coerceIn(minScroll, maxScroll)
-                                                if (chartHeight > 0f) {
+                                                val safeWidth = if (candleWidth.isNaN() || candleWidth <= 0f) 24f else candleWidth
+                                                val deltaBars = pan.x / safeWidth
+                                                if (!deltaBars.isNaN()) {
+                                                    scrollOffset = (scrollOffset + deltaBars).coerceIn(minScroll, maxScroll)
+                                                }
+                                                if (chartHeight > 0f && !pan.y.isNaN() && !priceRange.isNaN() && !priceRange.isInfinite()) {
                                                     pricePanOffset += (pan.y / chartHeight) * priceRange
                                                 }
                                                 change.consume()
@@ -313,12 +332,20 @@ fun CandlestickChartCompose(
 
                                         if (previousDistance > 0f && currentDistance > 0f) {
                                             val zoomRatio = currentDistance / previousDistance
-                                            candleWidth = (candleWidth * zoomRatio).coerceIn(4f, 120f)
+                                            if (!zoomRatio.isNaN() && !zoomRatio.isInfinite() && zoomRatio > 0f) {
+                                                candleWidth = (candleWidth * zoomRatio).coerceIn(4f, 120f)
+                                            }
 
                                             val pan = centroid - lastPos
                                             val minScroll = if (candles.size > 5) -(candles.size - 5).toFloat() else 0f
                                             val maxScroll = 50f
-                                            scrollOffset = (scrollOffset + pan.x / candleWidth).coerceIn(minScroll, maxScroll)
+                                            val safeWidth = if (candleWidth.isNaN() || candleWidth <= 0f) 24f else candleWidth
+                                            if (!pan.x.isNaN()) {
+                                                val deltaBars = pan.x / safeWidth
+                                                if (!deltaBars.isNaN()) {
+                                                    scrollOffset = (scrollOffset + deltaBars).coerceIn(minScroll, maxScroll)
+                                                }
+                                            }
                                         }
                                         previousDistance = currentDistance
                                         lastPos = centroid
@@ -345,11 +372,13 @@ fun CandlestickChartCompose(
                                     }
                                 } else if (!isPinching && startPos.x <= chartWidth && kotlin.math.abs(currentVelocity) > 120f) {
                                     flingJob = coroutineScope.launch {
-                                        var v = currentVelocity.coerceIn(-6000f, 6000f)
+                                        var v = if (currentVelocity.isNaN()) 0f else currentVelocity.coerceIn(-6000f, 6000f)
                                         val minScroll = if (candles.size > 5) -(candles.size - 5).toFloat() else 0f
                                         val maxScroll = 50f
                                         while (kotlin.math.abs(v) > 20f) {
-                                            val deltaBars = (v * 0.016f) / candleWidth
+                                            val safeWidth = if (candleWidth.isNaN() || candleWidth <= 0f) 24f else candleWidth
+                                            val deltaBars = (v * 0.016f) / safeWidth
+                                            if (deltaBars.isNaN()) break
                                             val nextScroll = (scrollOffset + deltaBars).coerceIn(minScroll, maxScroll)
                                             if (nextScroll == scrollOffset) break
                                             scrollOffset = nextScroll
