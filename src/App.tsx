@@ -26,6 +26,8 @@ import { PriceAlertsModal } from './components/PriceAlertsModal';
 import { CustomTimeframeModal } from './components/CustomTimeframeModal';
 import { BarReplayBar } from './components/BarReplayBar';
 import { AndroidProjectViewer } from './components/AndroidProjectViewer';
+import { WebsiteLanding } from './components/WebsiteLanding';
+import { AppDownloadModal } from './components/AppDownloadModal';
 import {
   ChevronDown,
   Bell,
@@ -38,11 +40,24 @@ import {
   Minimize,
   Plus,
   Clock,
+  Download,
+  Globe,
 } from 'lucide-react';
 
 const COMMON_TIMEFRAMES: Timeframe[] = ['1m', '3m', '5m', '15m', '1h', '4h', '1d'];
 
 export default function App() {
+  // Check if running inside installed standalone PWA app
+  const isStandaloneApp = typeof window !== 'undefined' && (
+    window.matchMedia('(display-mode: standalone)').matches ||
+    (navigator as unknown as { standalone?: boolean }).standalone === true
+  );
+
+  // View Mode: 'website' (showcase website) vs 'terminal' (live trading platform)
+  const [viewMode, setViewMode] = useState<'website' | 'terminal'>(isStandaloneApp ? 'terminal' : 'website');
+  // Auto-open download & install prompt on website open as requested
+  const [isDownloadModalOpen, setIsDownloadModalOpen] = useState<boolean>(true);
+
   // Active Pair & Data
   const [currentSymbol, setCurrentSymbol] = useState<string>('BTCUSDT');
   const [timeframe, setTimeframe] = useState<Timeframe>('1m');
@@ -442,6 +457,49 @@ export default function App() {
 
   const isBullish = (currentPairStats?.priceChangePercent || 0) >= 0;
 
+  // Showcase Website Mode (with automated App Download & Install modal popup)
+  if (viewMode === 'website') {
+    return (
+      <div className="relative min-h-screen bg-[#0d1117] text-[#d1d4dc] font-sans antialiased">
+        <WebsiteLanding
+          pairs={pairs}
+          onOpenTradingApp={() => setViewMode('terminal')}
+          onOpenDownloadModal={() => setIsDownloadModalOpen(true)}
+        />
+
+        {/* Automatic App Download & Install Modal Prompt when Website Opens */}
+        <AppDownloadModal
+          isOpen={isDownloadModalOpen}
+          onClose={() => setIsDownloadModalOpen(false)}
+          onOpenWebApp={() => {
+            setIsDownloadModalOpen(false);
+            setViewMode('terminal');
+          }}
+        />
+
+        {/* Watchlist Modal accessible from website */}
+        <WatchlistModal
+          isOpen={isWatchlistOpen}
+          onClose={() => setIsWatchlistOpen(false)}
+          pairs={pairs}
+          currentSymbol={currentSymbol}
+          onSelectPair={(sym: string) => {
+            setCurrentSymbol(sym);
+            setViewMode('terminal');
+          }}
+          favorites={favorites}
+          onToggleFavorite={handleToggleFavorite}
+        />
+
+        {/* Android Studio Clean Architecture Project Viewer */}
+        <AndroidProjectViewer
+          isOpen={isAndroidProjectOpen}
+          onClose={() => setIsAndroidProjectOpen(false)}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className={`w-screen h-screen flex flex-col bg-[#131722] text-[#d1d4dc] overflow-hidden ${isLandscape ? 'landscape-mode' : ''}`}>
       {/* Phone bezel frame wrapper if enabled */}
@@ -629,10 +687,30 @@ export default function App() {
               {isPhoneFrame ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
             </button>
 
+            {/* Return to Showcase Website */}
+            <button
+              onClick={() => setViewMode('website')}
+              className="flex items-center gap-1 px-2 py-1 rounded bg-[#202430] hover:bg-[#2a2e39] text-[#d1d4dc] hover:text-white border border-[#2a2e39] text-xs font-medium transition-colors cursor-pointer"
+              title="Return to Website Showcase"
+            >
+              <Globe className="w-3.5 h-3.5 text-[#2962ff]" />
+              <span className="hidden md:inline">Website</span>
+            </button>
+
+            {/* Install / Download App Button */}
+            <button
+              onClick={() => setIsDownloadModalOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-gradient-to-r from-[#2962ff] to-[#00b4d8] hover:brightness-110 text-white text-xs font-semibold shadow transition-all cursor-pointer"
+              title="Download Android APK or Install Web App (PWA)"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Download App</span>
+            </button>
+
             {/* Android Studio Source Code */}
             <button
               onClick={() => setIsAndroidProjectOpen(true)}
-              className="flex items-center gap-1 px-2 py-1 rounded bg-[#2962ff] hover:bg-[#1e4bd8] text-white text-xs font-semibold shadow transition-colors cursor-pointer"
+              className="flex items-center gap-1 px-2 py-1 rounded bg-[#202430] hover:bg-[#2a2e39] text-[#787b86] hover:text-white border border-[#2a2e39] text-xs font-medium transition-colors cursor-pointer"
               title="View Kotlin & Jetpack Compose Android Studio project"
             >
               <FolderGit2 className="w-3.5 h-3.5" />
@@ -828,6 +906,13 @@ export default function App() {
       <AndroidProjectViewer
         isOpen={isAndroidProjectOpen}
         onClose={() => setIsAndroidProjectOpen(false)}
+      />
+
+      {/* App Download & Install Modal */}
+      <AppDownloadModal
+        isOpen={isDownloadModalOpen}
+        onClose={() => setIsDownloadModalOpen(false)}
+        onOpenWebApp={() => setIsDownloadModalOpen(false)}
       />
     </div>
   );
