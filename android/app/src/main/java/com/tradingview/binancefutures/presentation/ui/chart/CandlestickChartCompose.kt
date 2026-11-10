@@ -14,6 +14,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -78,14 +81,14 @@ fun CandlestickChartCompose(
     var crosshairPosition by remember { mutableStateOf<Offset?>(null) }
 
     val coroutineScope = rememberCoroutineScope()
-    var flingJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    var flingJob by remember { mutableStateOf<Job?>(null) }
     var lastPriceScaleTap by remember { mutableLongStateOf(0L) }
 
     // Live clock ticker for real-time candle countdown
     var currentClockTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
         while (true) {
-            kotlinx.coroutines.delay(1000L)
+            delay(1000L)
             currentClockTime = System.currentTimeMillis()
         }
     }
@@ -351,7 +354,7 @@ fun CandlestickChartCompose(
                                             if (nextScroll == scrollOffset) break
                                             scrollOffset = nextScroll
                                             v *= 0.92f
-                                            kotlinx.coroutines.delay(16L)
+                                            delay(16L)
                                         }
                                     }
                                 }
