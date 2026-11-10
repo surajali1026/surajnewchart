@@ -5,6 +5,8 @@ import android.content.res.Configuration
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -66,6 +68,16 @@ class MainActivity : ComponentActivity() {
                 var isAlertsOpen by remember { mutableStateOf(false) }
                 var isCustomTfOpen by remember { mutableStateOf(false) }
                 var isFullScreen by remember { mutableStateOf(false) }
+
+                LaunchedEffect(isFullScreen) {
+                    val bars = WindowInsetsControllerCompat(window, window.decorView)
+                    if (isFullScreen) {
+                        bars.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                        bars.hide(WindowInsetsCompat.Type.systemBars())
+                    } else {
+                        bars.show(WindowInsetsCompat.Type.systemBars())
+                    }
+                }
 
                 val currentPair = remember(uiState.pairs, uiState.symbol) {
                     uiState.pairs.firstOrNull { it.symbol == uiState.symbol }
@@ -165,6 +177,17 @@ class MainActivity : ComponentActivity() {
                                                 fontSize = 12.sp,
                                                 fontWeight = FontWeight.Bold
                                             )
+
+                                            Surface(
+                                                onClick = { isCustomTfOpen = true },
+                                                shape = RoundedCornerShape(4.dp),
+                                                color = Color(0xFF26364A),
+                                                modifier = Modifier.height(22.dp)
+                                            ) {
+                                                Box(modifier = Modifier.padding(horizontal = 7.dp), contentAlignment = Alignment.Center) {
+                                                    Text("Custom", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                                }
+                                            }
 
                                             // Horizontal Timeframe Row inside Fullscreen
                                             Row(
