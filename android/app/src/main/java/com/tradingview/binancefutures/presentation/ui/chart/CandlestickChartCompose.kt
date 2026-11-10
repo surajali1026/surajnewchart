@@ -348,6 +348,7 @@ fun CandlestickChartCompose(
                             )
                         }
                     }
+                    else -> Unit
                 }
             }
 

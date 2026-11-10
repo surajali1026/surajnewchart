@@ -48,12 +48,21 @@ fun TradingHeader(
         scrollState.animateScrollTo(
             when (timeframe) {
                 Timeframe.M1 -> 0
-                Timeframe.M3 -> 40
-                Timeframe.M5 -> 80
-                Timeframe.M15 -> 140
-                Timeframe.H1 -> 200
-                Timeframe.H4 -> 280
-                Timeframe.D1 -> 360
+                Timeframe.M3 -> 50
+                Timeframe.M5 -> 100
+                Timeframe.M15 -> 150
+                Timeframe.M30 -> 200
+                Timeframe.H1 -> 250
+                Timeframe.H2 -> 300
+                Timeframe.H4 -> 350
+                Timeframe.H6 -> 400
+                Timeframe.H8 -> 450
+                Timeframe.H12 -> 500
+                Timeframe.D1 -> 550
+                Timeframe.D3 -> 600
+                Timeframe.W1 -> 650
+                Timeframe.MO1 -> 700
+                else -> 0
             }
         )
     }
@@ -232,7 +241,10 @@ fun TradingHeader(
             ) {
                 val commonTfs = listOf(
                     Timeframe.M1, Timeframe.M3, Timeframe.M5,
-                    Timeframe.M15, Timeframe.H1, Timeframe.H4, Timeframe.D1
+                    Timeframe.M15, Timeframe.M30, Timeframe.H1,
+                    Timeframe.H2, Timeframe.H4, Timeframe.H6,
+                    Timeframe.H8, Timeframe.H12, Timeframe.D1,
+                    Timeframe.D3, Timeframe.W1, Timeframe.MO1
                 )
 
                 commonTfs.forEach { tf ->
