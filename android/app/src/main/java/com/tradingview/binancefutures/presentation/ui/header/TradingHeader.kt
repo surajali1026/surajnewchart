@@ -148,7 +148,7 @@ fun TradingHeader(
                 currentPair?.let { pair ->
                     Column {
                         Text(
-                            text = String.format(Locale.US, "%.2f", pair.price),
+                            text = formatMarketPrice(pair.price),
                             color = priceColor,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold
