@@ -2,7 +2,10 @@ package com.tradingview.binancefutures.presentation.viewmodel
 
 import android.app.Application
 import android.content.Context
-import android.media.RingtoneManager
+import android.media.AudioManager
+import android.media.ToneGenerator
+import android.os.Handler
+import android.os.Looper
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -399,11 +402,14 @@ class ChartViewModel @JvmOverloads constructor(
 
     private fun playAlertSound(context: Context) {
         try {
-            val notificationUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-            val ringtone = RingtoneManager.getRingtone(context, notificationUri)
-            ringtone?.play()
+            // Use the alarm stream at full ToneGenerator level for a much more noticeable alert.
+            val generator = ToneGenerator(AudioManager.STREAM_ALARM, 100)
+            generator.startTone(ToneGenerator.TONE_PROP_BEEP2, 850)
+            Handler(Looper.getMainLooper()).postDelayed({
+                try { generator.release() } catch (_: Exception) { }
+            }, 1000L)
         } catch (e: Exception) {
-            // ignore sound error
+            android.util.Log.e("TradingApp", "Unable to play alert tone", e)
         }
     }
 }
