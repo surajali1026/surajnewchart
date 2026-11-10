@@ -20,6 +20,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.tradingview.binancefutures.domain.model.AlertCondition
 import com.tradingview.binancefutures.domain.model.Timeframe
@@ -46,7 +48,14 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             TradingViewTheme {
-                val viewModel: ChartViewModel = viewModel()
+                val viewModel: ChartViewModel = viewModel(
+                    factory = object : ViewModelProvider.Factory {
+                        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                            @Suppress("UNCHECKED_CAST")
+                            return ChartViewModel(application) as T
+                        }
+                    }
+                )
                 val uiState by viewModel.uiState.collectAsState()
 
                 var isWatchlistOpen by remember { mutableStateOf(false) }
