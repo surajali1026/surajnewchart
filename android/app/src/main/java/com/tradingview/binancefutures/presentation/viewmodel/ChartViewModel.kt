@@ -16,10 +16,12 @@ import com.tradingview.binancefutures.data.repository.TradingRepositoryImpl
 import com.tradingview.binancefutures.domain.model.*
 import java.util.UUID
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 data class ChartUiState(
@@ -50,6 +52,7 @@ class ChartViewModel @JvmOverloads constructor(
     val uiState: StateFlow<ChartUiState> = _uiState.asStateFlow()
 
     private var wsJob: Job? = null
+    private var pollJob: Job? = null
     private var previousPrice: Float? = null
 
     init {
@@ -159,6 +162,7 @@ class ChartViewModel @JvmOverloads constructor(
 
     private fun loadCandles(symbol: String, tf: Timeframe, pType: PriceType = _uiState.value.priceType) {
         wsJob?.cancel()
+        pollJob?.cancel()
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
             try {
@@ -168,25 +172,46 @@ class ChartViewModel @JvmOverloads constructor(
                     previousPrice = history.last().close
                 }
 
-                // Start WebSocket stream
+                // 1. WebSocket Live Stream
                 wsJob = launch {
                     repository.getLiveCandleStream(symbol, tf)
-                        .catch { /* handle reconnect */ }
+                        .catch { /* allow poller to maintain live movement */ }
                         .collect { updatedCandle ->
-                            val currentCandles = _uiState.value.candles.toMutableList()
-                            if (currentCandles.isNotEmpty() && currentCandles.last().time == updatedCandle.time) {
-                                currentCandles[currentCandles.size - 1] = updatedCandle
-                            } else {
-                                currentCandles.add(updatedCandle)
-                            }
-                            _uiState.value = _uiState.value.copy(candles = currentCandles)
-                            checkAlerts(updatedCandle)
+                            handleCandleUpdate(updatedCandle)
                         }
+                }
+
+                // 2. High-Frequency REST Poller Fallback (ensures live candle updates continuously even if WS is throttled on mobile)
+                pollJob = launch {
+                    while (isActive) {
+                        delay(1200)
+                        try {
+                            val latest = repository.getHistoricalCandles(symbol, tf, pType)
+                            if (latest.isNotEmpty()) {
+                                handleCandleUpdate(latest.last())
+                            }
+                        } catch (e: Exception) {
+                            // ignore transient network hiccup
+                        }
+                    }
                 }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(isLoading = false, errorMessage = e.message)
             }
         }
+    }
+
+    private fun handleCandleUpdate(updatedCandle: Candle) {
+        val currentCandles = _uiState.value.candles.toMutableList()
+        if (currentCandles.isNotEmpty() && currentCandles.last().time == updatedCandle.time) {
+            currentCandles[currentCandles.size - 1] = updatedCandle
+        } else if (currentCandles.isNotEmpty() && updatedCandle.time > currentCandles.last().time) {
+            currentCandles.add(updatedCandle)
+        } else if (currentCandles.isEmpty()) {
+            currentCandles.add(updatedCandle)
+        }
+        _uiState.value = _uiState.value.copy(candles = currentCandles)
+        checkAlerts(updatedCandle)
     }
 
     // Drawings
