@@ -302,9 +302,17 @@ fun CandlestickChartCompose(
                                             onUpdateDrawing(selectedDrawing.copy(points = updated))
                                             change.consume()
                                         } else if (startPos.x > chartWidth) {
-                                            if (pan.y != 0f && !pan.y.isNaN()) {
+                                            // Dragging the price axis scales around the exact price under the finger.
+                                            if (pan.y != 0f && !pan.y.isNaN() && chartHeight > 0f) {
+                                                val anchorY = currentPos.y.coerceIn(0f, chartHeight)
+                                                val anchorPrice = yToPrice(anchorY)
                                                 val scaleFactor = (1f - pan.y * 0.006f).coerceIn(0.8f, 1.2f)
-                                                priceScaleMultiplier = (priceScaleMultiplier * scaleFactor).coerceIn(0.1f, 10.0f)
+                                                val nextMultiplier = (priceScaleMultiplier * scaleFactor).coerceIn(0.1f, 10f)
+                                                val nextRange = max(rawMaxPrice - rawMinPrice, max(rawMaxPrice * 0.001f, 1f)) * 1.1f / nextMultiplier
+                                                val nextDisplayMin = anchorPrice - ((chartHeight - anchorY) / chartHeight) * nextRange
+                                                val nextMidPrice = nextDisplayMin + nextRange / 2f
+                                                priceScaleMultiplier = nextMultiplier
+                                                pricePanOffset = nextMidPrice - ((rawMaxPrice + rawMinPrice) / 2f)
                                             }
                                             change.consume()
                                         } else {
@@ -333,17 +341,39 @@ fun CandlestickChartCompose(
                                         if (previousDistance > 0f && currentDistance > 0f) {
                                             val zoomRatio = currentDistance / previousDistance
                                             if (!zoomRatio.isNaN() && !zoomRatio.isInfinite() && zoomRatio > 0f) {
-                                                candleWidth = (candleWidth * zoomRatio).coerceIn(4f, 120f)
+                                                if (centroid.x > chartWidth) {
+                                                    // Pinching directly on the price axis zooms price, not candle spacing.
+                                                    val anchorY = centroid.y.coerceIn(0f, chartHeight)
+                                                    val anchorPrice = yToPrice(anchorY)
+                                                    val nextMultiplier = (priceScaleMultiplier * zoomRatio).coerceIn(0.1f, 10f)
+                                                    val nextRange = max(rawMaxPrice - rawMinPrice, max(rawMaxPrice * 0.001f, 1f)) * 1.1f / nextMultiplier
+                                                    val nextDisplayMin = anchorPrice - ((chartHeight - anchorY) / chartHeight) * nextRange
+                                                    val nextMidPrice = nextDisplayMin + nextRange / 2f
+                                                    priceScaleMultiplier = nextMultiplier
+                                                    pricePanOffset = nextMidPrice - ((rawMaxPrice + rawMinPrice) / 2f)
+                                                } else {
+                                                    // Keep the candle under the pinch centroid stationary while zooming.
+                                                    val oldWidth = candleWidth.coerceIn(4f, 120f)
+                                                    val newWidth = (oldWidth * zoomRatio).coerceIn(4f, 120f)
+                                                    if (newWidth != oldWidth) {
+                                                        val anchorCorrection = (chartWidth - centroid.x) * (1f / oldWidth - 1f / newWidth)
+                                                        candleWidth = newWidth
+                                                        val minScroll = if (candles.size > 5) -(candles.size - 5).toFloat() else 0f
+                                                        scrollOffset = (scrollOffset + anchorCorrection).coerceIn(minScroll, 50f)
+                                                    }
+                                                }
                                             }
 
-                                            val pan = centroid - lastPos
-                                            val minScroll = if (candles.size > 5) -(candles.size - 5).toFloat() else 0f
-                                            val maxScroll = 50f
-                                            val safeWidth = if (candleWidth.isNaN() || candleWidth <= 0f) 24f else candleWidth
-                                            if (!pan.x.isNaN()) {
-                                                val deltaBars = pan.x / safeWidth
-                                                if (!deltaBars.isNaN()) {
-                                                    scrollOffset = (scrollOffset + deltaBars).coerceIn(minScroll, maxScroll)
+                                            // Two-finger translation pans the chart without changing the zoom anchor.
+                                            if (centroid.x <= chartWidth) {
+                                                val pan = centroid - lastPos
+                                                val minScroll = if (candles.size > 5) -(candles.size - 5).toFloat() else 0f
+                                                val safeWidth = candleWidth.coerceIn(4f, 120f)
+                                                if (!pan.x.isNaN()) {
+                                                    val deltaBars = pan.x / safeWidth
+                                                    if (!deltaBars.isNaN()) {
+                                                        scrollOffset = (scrollOffset + deltaBars).coerceIn(minScroll, 50f)
+                                                    }
                                                 }
                                             }
                                         }
