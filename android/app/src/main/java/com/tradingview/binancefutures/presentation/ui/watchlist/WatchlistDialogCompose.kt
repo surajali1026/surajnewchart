@@ -51,7 +51,7 @@ fun WatchlistDialogCompose(
         } else {
             when (selectedTab) {
                 WatchlistTab.ALL -> pairs
-                WatchlistTab.WATCHLIST -> pairs.filter { favorites.contains(it.symbol) }
+                WatchlistTab.WATCHLIST -> pairs.filter { favorites.contains(it.symbol) }.sortedByDescending { it.quoteVolume }
                 WatchlistTab.TOP_100 -> pairs.sortedByDescending { it.quoteVolume }.take(100)
                 WatchlistTab.GAINERS -> pairs.sortedByDescending { it.priceChangePercent }
                 WatchlistTab.LOSERS -> pairs.sortedBy { it.priceChangePercent }
@@ -243,7 +243,7 @@ fun WatchlistDialogCompose(
 
                             Column(horizontalAlignment = Alignment.End) {
                                 Text(
-                                    text = String.format(Locale.US, "%.2f", pair.price),
+                                    text = formatMarketPrice(pair.price),
                                     color = Color.White,
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold
