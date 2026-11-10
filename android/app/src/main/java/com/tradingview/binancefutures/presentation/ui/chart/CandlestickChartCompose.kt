@@ -458,7 +458,7 @@ fun CandlestickChartCompose(
                     )
                     drawText(
                         textMeasurer = textMeasurer,
-                        text = String.format(Locale.US, "%.2f", p),
+                        text = formatMarketPrice(p),
                         topLeft = Offset(chartWidth + 8f, y - 10f),
                         style = TextStyle(color = TVTextSecondary, fontSize = 10.sp)
                     )
@@ -701,7 +701,7 @@ fun CandlestickChartCompose(
                         )
                         drawText(
                             textMeasurer = textMeasurer,
-                            text = String.format(Locale.US, "%.2f", alert.targetPrice),
+                            text = formatMarketPrice(alert.targetPrice),
                             topLeft = Offset(chartWidth + 10f, alertY - 7f),
                             style = TextStyle(color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                         )
@@ -730,7 +730,7 @@ fun CandlestickChartCompose(
                     )
                     drawText(
                         textMeasurer = textMeasurer,
-                        text = String.format(Locale.US, "%.2f", last.close),
+                        text = formatMarketPrice(last.close),
                         topLeft = Offset(chartWidth + 10f, lastY - 8f),
                         style = TextStyle(color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     )
@@ -838,10 +838,10 @@ fun CandlestickChartCompose(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text("$symbol · ${timeframe.displayName}", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    Text("O: ${String.format(Locale.US, "%.2f", displayCandle.open)}", color = TVTextSecondary, fontSize = 10.sp)
-                    Text("H: ${String.format(Locale.US, "%.2f", displayCandle.high)}", color = TVTextSecondary, fontSize = 10.sp)
-                    Text("L: ${String.format(Locale.US, "%.2f", displayCandle.low)}", color = TVTextSecondary, fontSize = 10.sp)
-                    Text("C: ${String.format(Locale.US, "%.2f", displayCandle.close)}", color = if (displayCandle.close >= displayCandle.open) TVBullishGreen else TVBearishRed, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text("O: ${formatMarketPrice(displayCandle.open)}", color = TVTextSecondary, fontSize = 10.sp)
+                    Text("H: ${formatMarketPrice(displayCandle.high)}", color = TVTextSecondary, fontSize = 10.sp)
+                    Text("L: ${formatMarketPrice(displayCandle.low)}", color = TVTextSecondary, fontSize = 10.sp)
+                    Text("C: ${formatMarketPrice(displayCandle.close)}", color = if (displayCandle.close >= displayCandle.open) TVBullishGreen else TVBearishRed, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     Surface(
                         color = TVCard.copy(alpha = 0.85f),
                         shape = RoundedCornerShape(4.dp)
